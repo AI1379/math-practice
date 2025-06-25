@@ -1,0 +1,54 @@
+---
+title: 'Lab 3: Data Wrangling on Soccer Tournament Data'
+date: '2025/06/28'
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup, message = F, include=FALSE}
+library(tidyverse)
+```
+
+Soccer tournament data wrangling
+--------------------------
+Read the dataset of football games.
+```{r}
+d <- read_csv("data/results.csv")
+```
+
+1. Select variables `date`, `home_team` and `away_team`.
+```{r}
+
+```
+2. Subset games with **Brazil** as the home team.
+```{r}
+```
+
+3. Choose the games that Brazil won as the home team, and select variables `date`, `away_team` and `tournament`.
+```{r}
+
+```
+
+4. Add the difference of goals, and an indicator variable called `goleada` for when the difference of goals is large,  and select what we did only for Brazil. **Hint: use `ifelse`**.
+```{r}
+
+```
+
+5. What was the largest difference in goals within these games?
+```{r}
+
+```
+
+6. The top 5 goleadas?
+```{r}
+
+```
+7. Summary on goals scored by home teams, such as `mean` of `home_score` and `away_score`, `std`, using `group_by` and `summarise`
+```{r}
+
+```
+
+8. Proportion of victories of **Brazil** on different tournaments against each opponent, for instance, **Argentina**.
+```{r}
+
+```

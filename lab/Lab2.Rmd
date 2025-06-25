@@ -1,0 +1,38 @@
+---
+title: "Lab 2: Data Visulization"
+date: "2025/06/27"
+output: pdf_document
+---
+```{r setup, message = F, include=FALSE}
+library(tidyverse)
+```
+
+Today's agenda: data visualization with ggplot2. Get help on dataset ChickWeight by `?ChickWeight`. Play with the following R code to figure out what we are doing here.
+
+### First plot
+```{r}
+p1 <- ggplot(ChickWeight, aes(x=Time, y=weight, colour=Diet)) +
+    geom_point(alpha=.3) +
+    geom_smooth(alpha=.2, size=1) +
+    ggtitle("Fitted growth curve per diet")
+p1
+```
+----
+### Second plot
+```{r}
+p2 <- ggplot(subset(ChickWeight, Time==21), aes(x=weight, colour=Diet)) +
+    geom_density() +
+    ggtitle("Final weight, by diet")
+p2
+```
+----
+### Third plot
+```{r}
+p3 <- ggplot(subset(ChickWeight, Time==21), aes(x=weight, fill=Diet)) +
+    geom_histogram(colour="black", binwidth=50) +
+    facet_grid(Diet ~ .) +
+    ggtitle("Final weight, by diet") +
+    theme(legend.position="none")        # No legend (redundant in this graph)
+p3
+```
+

@@ -1,0 +1,900 @@
+---
+title: "Date Science with R"
+subtitle: "Statistical models"
+author: "Peng Zhang"
+institute: "School of Mathematical Sciences, Zhejiang University"
+date: "2025/06/30"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+# source('xaringan2pdf.R')
+# xaringan_to_pdf('Chapter6.html')
+```
+
+### Agenda
+
+- Using data frames for statistical purposes
+- Manipulation of data into more convenient forms
+- (Re-)Introduction to linear models and the model space
+
+So You've Got A Data Frame. What can we do with it?
+
+- Plot it: examine multiple variables and distributions
+- Test it: compare groups of individuals to each other
+- Check it: does it conform to what we'd like for our needs?
+
+---
+### Test Case: Birth weight data
+
+Included in R already:
+
+```{r message = F, out.width = '250px'}
+library(tidyverse)
+library(lubridate)
+library(MASS)
+data(birthwt)
+summary(birthwt)
+```
+
+---
+#### Make it readable!
+
+```{r}
+colnames(birthwt)
+colnames(birthwt) <- c("birthwt.below.2500", "mother.age", 
+                       "mother.weight", "race",
+                       "mother.smokes", "previous.prem.labor", 
+                       "hypertension", "uterine.irr",
+                       "physician.visits", "birthwt.grams")
+```
+
+Let's make all the factors more descriptive.
+
+```{r}
+birthwt$race <- factor(c("white", "black", "other")[birthwt$race])
+birthwt$mother.smokes <- factor(c("No", "Yes")[birthwt$mother.smokes + 1])
+birthwt$uterine.irr <- factor(c("No", "Yes")[birthwt$uterine.irr + 1])
+birthwt$hypertension <- factor(c("No", "Yes")[birthwt$hypertension + 1])
+```
+
+---
+### Bar plot for race
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+birthwt |> ggplot(aes(x = race))+
+  geom_bar()+
+  labs(title = "Count of Mother's Race in Springfield MA, 1986")
+```
+---
+### Scatter plot for mother's ages
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+birthwt |> ggplot(aes(x = 1:nrow(birthwt), y = mother.age))+
+  geom_point()+
+  labs(x = 'number', title = "Mother's Ages in Springfield MA, 1986")
+```
+---
+### Sorted mother's ages
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+birthwt |> arrange(mother.age) |> ggplot(aes(x = 1:nrow(birthwt), y = mother.age))+
+  geom_point()+
+  labs(x = 'number', title = "Mother's Ages in Springfield MA, 1986")
+```
+
+---
+### Birth weight versus mother's ages
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+birthwt |> ggplot(aes(x = mother.age, y = birthwt.grams))+
+  geom_point()+
+  labs(title = "Birth Weight by Mother's Age in Springfield MA, 1986")
+```
+---
+### Boxplot
+
+Let's fit some models to the data pertaining to our outcome(s) of interest. 
+
+```{r, dpi=300, fig.width=12, fig.height=6}
+birthwt |> ggplot(aes(x = mother.smokes, y = birthwt.grams))+  
+  geom_boxplot()+
+  labs(title = "Birth Weight by Mother's Smoking Habit", y = "Birth Weight (g)", x="Mother Smokes")
+```
+---
+### Basic statistical testing
+
+Tough to tell! Simple two-sample t-test:
+
+```{r}
+t.test (birthwt$birthwt.grams[birthwt$mother.smokes == "Yes"], 
+        birthwt$birthwt.grams[birthwt$mother.smokes == "No"], var.equal = T)
+```
+---
+Does this difference match the linear model?
+
+```{r}
+linear.model.1 <- lm (birthwt.grams ~ mother.smokes, data=birthwt)
+summary(linear.model.1)
+```
+---
+### Basic statistical testing
+
+Does this difference match the linear model?
+
+```{r}
+linear.model.2 <- lm (birthwt.grams ~ mother.age, data=birthwt)
+summary(linear.model.2)
+```
+
+---
+Diagnostics: R tries to make it as easy as possible (but no easier). Try in R proper:
+
+```{r, echo=FALSE, dpi=300, fig.width=12, fig.height=9}
+par(mfrow = c(2,2))
+plot(linear.model.2)
+```
+---
+### Detecting Outliers
+
+These are the default diagnostic plots for the analysis. Note that our oldest mother and her heaviest child are greatly skewing this analysis as we suspected. 
+
+```{r message = F}
+birthwt.noout <- birthwt |> filter(mother.age <= 40)
+linear.model.3 <- lm (birthwt.grams ~ mother.age, data=birthwt.noout)
+summary(linear.model.3)
+```
+---
+#### More complex models
+
+Add in smoking behavior:
+
+```{r}
+linear.model.3a <- lm (birthwt.grams ~ + mother.smokes + mother.age, data=birthwt.noout)
+summary(linear.model.3a)
+```
+---
+```{r, echo=FALSE, dpi=300, fig.width=7, fig.height=6}
+par(mfrow = c(2,2))
+plot(linear.model.3a)
+```
+---
+### More complex models
+
+Add in smoking behavior:
+
+```{r}
+linear.model.3b <- lm (birthwt.grams ~ mother.age + mother.smokes + race, data=birthwt.noout)
+summary(linear.model.3b)
+```
+---
+```{r,echo=FALSE, dpi=300, fig.width=7, fig.height=6}
+par(mfrow = c(2,2))
+plot(linear.model.3b)
+```
+---
+### Everything Must Go (In)
+
+Let's do a kitchen sink model on this new data set:
+
+```{r}
+linear.model.4 <- lm (birthwt.grams ~ ., data=birthwt.noout)
+summary(linear.model.4)
+```
+
+---
+### Everything Must Go (In), Except What Must Not
+
+Whoops! One of those variables was `birthwt.below.2500` which is a function of the outcome.
+
+```{r}
+linear.model.4a <- lm (birthwt.grams ~ . - birthwt.below.2500, data=birthwt.noout)
+summary(linear.model.4a)
+```
+---
+```{r,  echo=FALSE, dpi=300, fig.width=7, fig.height=6}
+par(mfrow = c(2,2))
+plot(linear.model.4a)
+```
+---
+### Generalized Linear Models
+
+Maybe a linear increase in birth weight is less important than if it's below a threshold like 2500 grams (5.5 pounds). Let's fit a generalized linear model instead:
+```{r}
+glm.0 <- glm (birthwt.below.2500 ~ . - birthwt.grams, data=birthwt.noout)
+```
+---
+```{r, echo=FALSE, dpi=300, fig.width=7, fig.height=6}
+par(mfrow = c(2,2))
+plot(glm.0)
+```
+---
+### Generalized Linear Models
+The default value is a Gaussian model (a standard linear model). Change this:
+ 
+```{r}
+glm.1 <- glm (birthwt.below.2500 ~ . - birthwt.grams, data=birthwt.noout, family=binomial(link=logit))
+summary(glm.1)
+```
+---
+```{r, echo=FALSE, dpi=300, fig.width=7, fig.height=6}
+par(mfrow = c(2,2))
+plot(glm.1)
+```
+---
+### What Do We Do With This, Anyway?
+
+Let's take a subset of this data to do predictions.
+
+```{r}
+odds <- seq(1, nrow(birthwt.noout), by=2)
+birthwt.in <- birthwt.noout[odds,]
+birthwt.out <- birthwt.noout[-odds,]
+linear.model.half <- lm (birthwt.grams ~ . - birthwt.below.2500, data=birthwt.in)
+summary (linear.model.half)
+```
+---
+```{r}
+birthwt.predict <- predict (linear.model.half)
+cor (birthwt.in$birthwt.grams, birthwt.predict)
+```
+
+```{r, dpi=300, fig.width=12, fig.height=6}
+tibble(x = birthwt.out$birthwt.grams, y = birthwt.predict) |>
+  ggplot (aes(x = x, y = y)) + geom_point()
+```
+---
+### What Do We Do With This, Anyway?
+
+```{r}
+birthwt.predict.out <- predict (linear.model.half, birthwt.out)
+cor (birthwt.out$birthwt.grams, birthwt.predict.out)
+```
+
+```{r, echo=FALSE, dpi=300, fig.width=12, fig.height=6}
+tibble(x = birthwt.out$birthwt.grams, y = birthwt.predict.out) |> 
+ggplot (aes(x = x, y = y)) + geom_point()
+```
+---
+## Random number generators
+
+- We made reference to random number generation without going under the hood.
+- How _does_ R get "random" numbers? 
+- It doesn't, really -- it uses a trick that should be indistinguishable from the real McCoy
+
+Pseudorandom generators produce a deterministic sequence that is indistiguishable from a true random sequence if you don't know how it started.
+
+#### Example: `runif`, where we know where it started
+
+```{r}
+runif(1:10)
+set.seed(10)
+runif(1:10)
+set.seed(10)
+runif(1:10)
+```
+---
+### Basic version: Linear Congruential Generator
+
+```{r}
+seed <- 10
+new.random <- function (a=5, c=12, m=16) {
+  out <- (a*seed + c) %% m  
+  seed <<- out
+  return(out)
+}
+out.length <- 20
+variates <- rep (NA, out.length)
+for (kk in 1:out.length) variates[kk] <- new.random()
+variates
+```
+---
+## Try again
+
+Period 8:
+
+```{r}
+variates <- rep (NA, out.length)
+for (kk in 1:out.length) variates[kk] <- new.random(a=131, c=7, m=16)
+variates
+```
+---
+## Try again, again
+
+Period 16:
+
+```{r}
+variates <- rep (NA, out.length)
+for (kk in 1:out.length) variates[kk] <- new.random(a=129, c=7, m=16)
+variates
+```
+
+---
+## Try again, at last
+
+Numerical Recipes uses
+```{r}
+variates <- rep (NA, out.length)
+for (kk in 1:out.length) variates[kk] <- new.random(a=1664545, c=1013904223, m=2^32)
+variates
+```
+---
+### How To Distinguish Non-Randomness
+
+- We've covered period: if it's missing some values, it's distinguishable 
+- Uniformity of distribution in the limitx
+- Autocorrelation
+- Dimensional distribution -- not a problem for 1-D distributions, but can be for 2+-D
+
+---
+### How does R get everything we need?
+
+A few distributions of interest:
+
+- Uniform(0,1)
+- Bernoulli(p)
+- Binomial(n,p)
+- Gaussian(0,1)
+- Exponential(1)
+- Gamma(a)
+
+---
+### In R: everything we need
+
+Suppose we were working with the Exponential distribution.
+
+- `rexp()` generates variates from the distribution.
+- `dexp()` gives the probability density function.
+- `pexp()` gives the cumulative distribution function.
+- `qexp()` gives the quantiles.
+---
+#### `dexp()`
+```{r, dpi=300, fig.width=10, fig.height=4}
+dexp(0:5)
+this.range <- 0:50/5
+plot (this.range, dexp(this.range), ty="l")
+lines (this.range, dexp(this.range, rate=0.5), col="red")
+lines (this.range, dexp(this.range, rate=0.2), col="blue")
+```
+---
+#### `pexp()`
+```{r, dpi=300, fig.width=10, fig.height=4}
+pexp(0:5)
+this.range <- 0:50/5
+plot (this.range, pexp(this.range), ty="l")
+lines (this.range, pexp(this.range, rate=0.5), col="red")
+lines (this.range, pexp(this.range, rate=0.2), col="blue")
+```
+---
+#### `qexp()`
+```{r, message = F, dpi=300, fig.width=10, fig.height=4}
+qexp(0:5)
+this.range <- seq(0,1,by=0.01)
+plot (this.range, qexp(this.range), ylim = c(0, 10), ty="l")
+lines (this.range, qexp(this.range, rate=0.5), col="red")
+lines (this.range, qexp(this.range, rate=0.2), col="blue")
+```
+
+## Probability distributions
+- Distributions from data
+- Review of R for theoretical distributions
+- Fitting distributions to data
+- Checking distributions against data
+
+#### Let's Load Some Cheerful Data
+
+```{r message = F}
+data("cats", package="MASS")
+```
+---
+#### Let's Grab some Data
+
+The Standard and Poor's 500, or simply the S\&P 500, is a stock market index tracking the stock performance of 500 large companies listed on exchanges in the United States. It is one of the most commonly followed equity indices.
+```{r, message = F}
+library(readxl)
+SP <- read_excel("data/Stock_Bond.xls") |> dplyr::select(Date, `S&P_AC`) |>
+  rename(Index = `S&P_AC`)
+```
+
+---
+
+```{r, dpi=300, fig.width=12, fig.height=8}
+SP |> ggplot(aes(x = Date, y = Index)) + geom_line()
+```
+
+---
+### Let's Transform Some Data
+
+The price $p_t$ doesn't matter, what matters are the returns $r_t = \log{(p_t/p_{t-1})}$
+```{r, dpi=300, fig.width=12, fig.height=5}
+returns <- na.omit(as.vector(diff(log(SP$Index))))
+summary(returns)
+plot(returns, type="l")
+```
+---
+
+### The Data's Distribution
+`quantile(x,probs)` calculates the quantiles at `probs` from `x`
+
+```{r}
+quantile(returns,c(0.25,0.5,0.75))
+```
+
+`ecdf()` - _e_ mpirical _c_ umulative _d_ istribution _f_ unction; no assumptions but also no guess about distribution between the observations
+
+In math, ECDF is often written as $\widehat{F}$ or $\widehat{F}_n$
+
+---
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+plot(ecdf(returns), main="Empirical CDF of S&P 500 index returns")
+```
+
+<small>Conceptually, `quantile` and `ecdf` are inverses to each other</small>
+---
+### Getting Probability Densities from Data
+
+`hist(x)` calculates a histogram from x
+- divide the data range up into equal-width bins and _count_ how many fall into each bin
+- _Or_ divide bin counts by (total count)*(width of bin), and get an estimate of the probability density function (pdf)  
+<small>Produces plot as a default side-effect</small>
+---
+```{r, dpi=300, fig.width=12, fig.height=8}
+hist(returns,n=101,probability=TRUE)
+```
+---
+### Probability Densities from Data (cont'd.)
+
+`density(x)` estimates the density of `x` by counting how many observations fall in a little window around each point, and then smoothing  
+    <small>"Bandwidth" $\approx$ width of window around each point</small>  
+    <small>Technically, a "kernel density estimate"</small>  
+
+Remember: `density()` is an _estimate_ of the pdf, not The Truth
+
+`density` returns a collection of $x,y$ values, suitable for plotting
+---
+```{r, dpi=300, fig.width=12, fig.height=8}
+plot(density(returns),main="Estimated pdf of S&P 500 index  returns")
+```
+---
+### Probability Densities from Data (cont'd.)
+
+```{r, dpi=300, fig.width=12, fig.height=8}
+hist(returns,n=101,probability=TRUE)
+lines(density(returns),lty="dashed")
+```
+
+---
+### Getting distributions from data (cont'd.)
+
+`table()` - tabulate outcomes, most useful for discrete spaces; remember to normalize if you want probabilities
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+plot(table(cats$Sex)/nrow(cats),ylab="probability")
+```
+
+---
+### Who Cares About the Distribution of the Data?
+
+- Overly detailed: every single observation recorded as a separate tick
+    + _Too much information_
+- The exact set of samples would never repeat if we re-ran things anyway
+    + _That information is wrong_
+- Try to _summarize_ what will _generalize_ to other situations
+    + Use a model, remember the model's parameters
+    
+---
+### R commands for distributions
+
+- `d`_foo_ = the probability _d_ ensity (if continuous) or probability mass function of _foo_ (pdf or pmf)
+- `p`_foo_ = the cumulative _p_ robability function (CDF)
+- `q`_foo_ = the _q_ uantile function (inverse to CDF)
+- `r`_foo_ = draw _r_ andom numbers from `foo` (first argument always the number of draws)
+
+`?Distributions` to see which distributions are built in
+
+If you write your own, follow the conventions
+---
+### Examples
+
+```{r}
+dnorm(x=c(-1,0,1),mean=1,sd=0.1)
+pnorm(q=c(2,-2)) # defaults to mean=0,sd=1
+dbinom(5,size=7,p=0.7,log=TRUE)
+qchisq(p=0.95,df=5)
+rt(n=4,df=2)
+```
+
+---
+## Displaying Probability Distributions
+
+`curve` is very useful for the `d`, `p`, `q` functions:
+```{r, dpi=300, fig.width=12, fig.height=7}
+curve(dgamma(x,shape=45,scale=1.9),from=0,to=200)
+```
+
+---
+### How Do We Fit Distributional Models to the Data?
+
+- Match moments (mean, variance, etc.)
+- Match other summary statistics
+- Maximize the likelihood
+
+
+#### Method of Moments (MM), Closed Form
+
+- Pick enough moments that they **identify** the parameters
+    + At least 1 moment per parameter; algebraically independent
+- Write equations for the moments in terms of the parameters  
+e.g., for gamma
+
+$$\mu = as ~,~ \sigma^2 = as^2$$
+- Do the algebra by hand to solve the equations
+
+$$a=\mu^2/\sigma^2 ~,~ s = \sigma^2/\mu$$
+- Code up the formulas (did this in lab 3)
+
+```{r}
+gamma.est_MM <- function(x) {
+  m <- mean(x); v <- var(x)
+  return(c(shape=m^2/v, scale=v/m))
+}
+```
+---
+### MM, Numerically
+
+- Write functions to get moments from parameters (usually algebra)
+- Set up the difference between data and model as another function
+
+```
+gamma.mean <- function(shape,scale) { return(shape*scale) }
+gamma.var <- function(shape,scale) { return(shape*scale^2) }
+gamma.discrepancy <- function(shape,scale,x) {
+  return((mean(x)-gamma.mean(shape,scale))^2 + (var(x)-gamma.mean(shape,scale))^2)
+}
+```
+
+- Minimize it
+---
+### More Generally...
+
+- Nothing magic about moments
+- Match other data summaries, say the median
+    + Or even more complicated things, like ratios of quantiles  
+    + <small>You did this in lab</small>
+- If you can't solve exactly for parameters from the summaries, set up a discrepancy function and minimize it
+    + <small>You are doing this in the HW</small>
+- The summaries just have to converge on population values
+
+---
+
+### Maximum Likeihood
+
+- Usually we think of the parameters as fixed and consider the probability of different outcomes, $f(x;\theta)$ with $\theta$ constant and $x$ changing
+- **Likelihood** of a parameter value = $L(\theta)$ = what probability does $\theta$ give to the data?
+    + For continuous variables, use probability density
+    + $f(x;\theta)$ but letting $\theta$ change while data constant
+    + _Not_ the probability of $\theta$, if that even makes sense
+- **Maximum likelihood** = guess that the parameter is whatever makes the data most likely
+- Most likely parameter value = **maximum likelihood estimate** = **MLE**
+
+---
+### Likelihood in Code
+
+- With independent data points $x_1, x_2, x_n$, likelihood is
+
+$$L(\theta) = \prod_{i=1}^{n}{f(x_i;\theta)}$$
+- Multiplying lots of small numbers is numerically bad; take the log:
+
+$$\ell(\theta) = \sum_{i=1}^{n}{\log{f(x_i;\theta)}}$$
+- In pseudo-code:
+
+```
+loglike.foo <- function(params, x) {
+  sum(dfoo(x=x,params,log=TRUE))
+}
+```
+---
+### What Do We Do with the Likelihood?
+
+- We maximize it!
+- Sometimes we can do the maximization by hand with some calculus
+    + For Gaussian, MLE = just match the mean and variance
+    + For Pareto, MLE $\widehat{a} = 1 + 1/\overline{\log{(x/x_{\mathrm{min}})}}$
+- Doing numerical optimization
+    + Stick in a minus sign if we're using a minimization function
+    
+---
+### Why Use the MLE?
+
+- Usually (but not always) _consistent_: converges on the truth as we get more data
+- Usually (but not always) _efficient_: converges on the truth at least as fast as anything else
+
+- There are some parameters where the maximum isn't well-defined (e.g. $x_{\mathrm{min}}$ for a Pareto)
+- Sometimes the data is too aggregated or mangled to use the MLE (as with the income data in lab 5)
+
+---
+### fitdistr
+
+MLE for one-dimensional distributions can be done through `fitdistr` in the `MASS` package
+
+It knows about most the standard distributions, but you can also give it arbitrary probability density functions and it will try to maximize them  
+A starting value for the optimization is optional for some distributions, required for others (including user-defined densities)
+
+Returns the parameter estimates and standard errors  
+SEs come from large $n$ approximations so use cautiously
+
+---
+### fitdistr Examples
+
+Fit the gamma distribution to the cats' hearts:
+```{r}
+require(MASS)
+fitdistr(cats$Hwt, densfun="gamma")
+```
+Returns: estimates above, standard errors below
+
+Fit the Students $t$ distribution to the returns:
+```{r message = F, warning=FALSE}
+fitdistr(returns,"t")
+```
+Here parameters are location (m), scale (s) and degrees of freedom (very heavy tails)
+
+---
+### fitdistr Examples (cont'd.)
+
+User-defined density:
+```{r}
+dpareto <- function(x,exponent,xmin,log=FALSE) {
+  f <- (exponent-1)/xmin * (x/xmin)^(-exponent)
+  f <- ifelse(x<xmin,NA,f)
+  if(!log) { return(f) } else (return(log(f)))
+}
+# Fit pareto to large absolute returns
+  # Parameters given outside the "start" list are fixed
+fitdistr(abs(returns)[abs(returns)>0.05], densfun=dpareto,
+         start=list(exponent=2.5), xmin=0.05)
+```
+
+---
+### Checking Your Estimator
+
+- simulate, then estimate; estimates should converge as the sample grows
+```{r}
+gamma.est_MM(rgamma(100,shape=19,scale=45))
+gamma.est_MM(rgamma(1e5,shape=19,scale=45))
+gamma.est_MM(rgamma(1e6,shape=19,scale=45))
+```
+---
+### Checking the Fit
+
+_Use your eyes_: Graphic overlays of theory vs. data
+```{r, dpi=300, fig.width=12, fig.height=6}
+plot(density(cats$Hwt))
+cats.gamma <- gamma.est_MM(cats$Hwt)
+curve(dgamma(x,shape=cats.gamma["shape"],scale=cats.gamma["scale"]),add=TRUE,col="blue")
+```
+
+---
+### Checking the Fit (cont'd.)
+
+- Calculate summary statistics _not_ used in fitting, compare them to the fitted model
+```{r}
+# Really bad and good days for index fund holders, per model:
+qnorm(c(0.01,0.99),mean=mean(returns),sd=sd(returns))
+# As it happened:
+quantile(returns,c(0.01,0.99)) 
+```
+---
+### Quantile-Quantile (QQ) Plots
+
+- Plot theoretical vs. actual quantiles
+- _or_ plot quantiles of two samples against each other
+- Ideally, a straight line when the distributions are the same
+- `qqnorm`, `qqline` are specialized for checking normality
+
+```{r, dpi=300, fig.width=12, fig.height=6}
+qqnorm(returns); qqline(returns)
+```
+
+---
+### QQ Plots (cont'd)
+
+- `qqplot(x,y)` will do a Q-Q plot of one vector against another
+```{r, dpi=300, fig.width=12, fig.height=7}
+qqplot(returns,qt((1:500)/501,df=3.59))
+```
+
+---
+### Calibration Plots
+
+- If the distribution is right, 50% of the data should be below the median, 90% should be below the 90th percentile, etc.
+- Special case of **calibration** of probabilities: events with probability _p_% should happen about _p_% of the time, not more and not less
+- We can look at calibraton by calculating the (empirical) CDF of the (theoretical) CDF and plotting
+    + Ideal calibration plot is a straight line up the diagonal
+    + Systematic deviations are a warning sign
+    
+---
+### Making a Calibration Plot
+
+```{r, dpi=300, fig.width=12, fig.height=6}
+plot(ecdf(pnorm(returns, mean=mean(returns), sd=sd(returns))),
+     main="Calibration of Gaussian distribution for returns")
+abline(0,1,col="grey")
+```
+Again, way too many large changes (in either direction)
+
+---
+### Calibration Plots (cont'd.)
+
+```{r, message = F, warning = F, dpi=300, fig.width=12, fig.height=7}
+SP.t <- coefficients(fitdistr(returns,"t"))
+plot(ecdf(pt((returns-SP.t[1])/SP.t[2], df=SP.t[3])),
+     main="Calibration of t distribution for returns")
+abline(0,1,col="grey")
+```
+
+---
+### Calibration Plots (cont'd.)
+
+```{r, dpi=300, fig.width=12, fig.height=7}
+plot(ecdf(pgamma(cats$Hwt, shape=cats.gamma["shape"], scale=cats.gamma["scale"])),
+     main="Calibration of gamma distribution for cats' hearts")
+abline(0,1,col="grey")
+```
+---
+### Calibration Plots (cont'd.)
+
+_Challenge_: Write a general function for making a calibraton plot, taking a
+data vector, a cumulative probability function, and a parameter vector
+
+
+#### Kolmogorov-Smirnov Test
+
+- How much should the QQ plot or calibration plot wiggle around the diagonal?
+- Answer a different question...
+- Biggest gap between theoretical and empirical CDF:
+
+$$D_{KS} = \max_{x}{\left|F(x)-\widehat{F}(x)\right|}$$
+
+- Useful because $D_{KS}$ always has the same distribution _if_ the theoretical CDF is fixed and correct, and K+S calculated this back in the day
+- Also works for comparing the empirical CDFs of two samples, to see if they came from the same distribution
+
+---
+### KS Test, Data vs. Theory
+
+```{r warning=FALSE}
+ks.test(returns,pnorm,mean=0,sd=0.0125)
+```
+- More complicated (and _not_ properly handled by built-in R) if parameters are estimated
+    + Estimating parameters makes the fit look _better_ than it really is, so it doesn't help save the model when it gets really rejected (like this one is)
+
+Hack: Estimate using (say) 90% of the data, and then check the fit on the remaining 10%
+---
+```{r warning=FALSE}
+train <- sample(1:length(returns),size=round(0.9*length(returns)))
+SP.t_train <- coefficients(fitdistr(returns[train],"t"))
+returns.test_standardized <- (returns[-train]-SP.t_train[1])/SP.t_train[2]
+ks.test(returns.test_standardized,pt,df=SP.t_train[3])
+```
+
+- Can also test whether two samples come from same distribution
+```{r warning=FALSE}
+n <- length(returns)
+half <- round(n/2)
+ks.test(returns[1:half], returns[(half+1):n])
+```
+---
+### Chi-Squared Test for Discrete Distributions
+
+Compare an actual table of counts to a hypothesized probability distribution
+
+e.g., as many up days as down?
+```{r warning=FALSE}
+up_or_down <- ifelse(returns > 0, 1, -1)
+# 1936 down days, 1772 up days
+chisq.test(table(up_or_down),p=c(1/2,1/2))
+```
+
+#### Chi-Squared Test: Degrees of Freedom
+
+- The $p$-value calculated by `chisq.test` assumes that all the probabilities in $p$ were _fixed_, not estimated from the data used for testing, so `df =` number of cells in the table $-1$
+- If we estimate $q$ parameters, we need to subtract $q$ degrees of freedom
+---
+### Chi-Squared Test for Continuous Distributions
+
+- Divide the range into bins and count the number of observations in each bin; this will be `x` in `chisq.test()`
+- Use the CDF function `p` _foo_ to calculate the theoretical probability of each bin; this is `p`
+- Plug in to `chisq.test`
+- If parameters are estimated, adjust
+
+- `hist()` gives us break points and counts:
+
+```{r, dpi=300, fig.width=12, fig.height=6}
+cats.hist <- hist(cats$Hwt,plot=FALSE)
+cats.hist$breaks
+cats.hist$counts
+```
+---
+### Chi-Squared for Continuous Data (cont'd.)
+
+Use these for a $\chi^2$ test:
+```{r warning=FALSE}
+# Why the padding by -Inf and Inf?
+p <- diff(pgamma(c(-Inf,cats.hist$breaks,Inf),shape=cats.gamma["shape"],
+                 scale=cats.gamma["scale"]))
+# Why the padding by 0 and 0?
+x2 <- chisq.test(c(0,cats.hist$counts,0),p=p)$statistic
+# Why +2? Why -length(cats.gamma)?
+pchisq(x2,df=length(cats.hist$counts)+2 - length(cats.gamma))
+```
+Don't need to run `hist` first; can also use `cut` to discretize (see `?cut`)
+
+- This is all a bit old-school
+    + Loss of information from discretization
+    + Lots of work just to use $\chi^2$
+- Try e.g. `ks.test` with an independent test set
+
+---
+### Summary
+
+- Visualizing and computing empirical distribution
+- Parametric distributions are models
+- Methods of fitting: moments, generalized moments, likelihood
+- Methods of checking: visual comparisons, other statistics, tests, calibration
+
+---
+### Aside: Some Math for MM and GMM
+
+- Parameter $\theta$ is a $p$-dimensional vector, true value = $\theta^*$
+- Introduce $q \geq p$ **functionals** $g_1, \ldots g_q$, which we can calculate either from the parameter $\theta$ or from the data $x_{1:n}$
+- _Assume_ that for each $i$, $g_i(x_{1:n}) \rightarrow g_i(\theta^*)$
+- _Define_
+
+$$\widehat{\theta}_{GMM} = \mathrm{argmin}_{\theta}{\sum_{i=1}^{q}{(g_i(\theta) - g_i(x_{1:n}))^2}}$$
+
+---
+### Math for MM and GMM (cont'd.)
+
+- Shouldn't be hard to believe that $\widehat{\theta}_{GMM} \rightarrow \theta^*$
+- But why give equal attention to every functional?
+    + More weight on the more-precisely-measured functionals
+    + More weight on the more-sensitive-to $\theta$ functionals
+    + Less weight on partially-redundant functionals
+-  _Abbreviate_ $g(\theta)$ for $(g_1(\theta), \ldots g_q(\theta))$, and likewise $g(x_{1:n})$, so
+
+$$\widehat{\theta}_{GMM} = \mathrm{argmin}_{\theta}{(g(\theta)-g(x_{1:n}))^T(g(\theta)-g(x_{1:n}))}$$
+
+- Generalize by introducing any positive-definite matrix $\Omega$:
+
+$$\widehat{\theta}_{GMM} = \mathrm{argmin}_{\theta}{(g(\theta)-g(x_{1:n}))^T \Omega (g(\theta)-g(x_{1:n}))}$$
+
+- Optimal $\Omega$ turns out to be the variance matrix of $g(\theta^*)$
+- Iterative approximation: start with no weighting, estimate that variance matrix, re-do the estimate with weights, etc.
+
+---
+### Aside: Some Math for the MLE
+
+- More convenient to work with the mean log likelihood:
+
+$$\Lambda(\theta) = \frac{1}{n}\sum_{i=1}^{n}{\log{f(X_i;\theta)}}$$
+
+- This is a sample average so the law of large numbers applies:
+
+$$\Lambda(\theta) \rightarrow \mathbf{E}[\Lambda(\theta)] = \lambda(\theta)$$
+
+- The true parameter has higher average log-likelihood than anything else: if $\theta \neq \theta^*$
+
+$$\theta \neq \theta^* ~ \Rightarrow \lambda(\theta) < \lambda(\theta^*)$$
+
+- Some extra conditions are needed for
+
+$$\widehat{\theta}_{MLE} \rightarrow \theta^*$$
+

@@ -1,0 +1,73 @@
+---
+title: 'Lab 6: How the Tetracycline Came to Peoria'
+date: "2025/07/01"
+output: pdf_document
+---
+```{r setup, message = F, include=FALSE}
+library(tidyverse)
+```
+
+***Agenda:*** Transforming data; combining information from multiple objects; practice with selective access; practice applying functions.
+
+Now-common ideas like “early adopters” and “viral marketing” grew from sociological studies of the diffusion of innovations. One of the most famous of these studies tracked how a then-new antibiotic, tetracycline, spread among doctors in four small cities in Illionis in the 1950s. In this lab, we will go back to that data to look at one of the crucial ideas, that of the innovation (prescribing tetracycline) “spreading” from person to person.
+You will use two data files, [ckm_nodes.csv] and [ckm_network.dat]. The former has information about each individual doctor in the four towns. The latter records which doctors knew each other.
+
+Part I
+------
+1. Load the dataset [ckm_nodes.csv] into a data frame, `ckm_nodes`. Check that it has 246 rows and 13 columns. Check that there are columns named `city` and `adoption_date`.
+
+```{r}
+ckm_nodes <- read_csv('data/ckm_nodes.csv')
+dim(ckm_nodes)
+```
+
+2. `adoption_date` records the month in which the doctor began prescribing tetracycline, counting from November 1953. If the doctor did not begin prescribing it by month 17, i.e., February 1955, when the study ended, this is recorded as `Inf`. If it’s not known when or if a doctor adopted tetracycline, their value is `NA`.
+    a. How many doctors began prescribing tetracycline in each month of the study? How many never prescribed? How many are NAs? Hints: `table()`, `is.na()`, `sum()`.
+```{r}
+table(ckm_nodes$adoption_date)
+sum(is.na(ckm_nodes$adoption_date))
+```
+    b. Create a vector which records the index numbers of doctors for whom `adoption_date` is not `NA`. Check that this vector has length 125. Re-assign `ckm_nodes` so it only contains those rows. (Do not drop rows if they have a value for `adoption_date` but are `NA` in some other column.) Use this cleaned version of `ckm_nodes` for the rest of the lab.
+```{r}
+adate <- !is.na(ckm_nodes$adoption_date)
+ckm_nodes <-  ckm_nodes %>% dplyr::filter(adate)
+```
+  
+3. Create plots of the number of doctors who began prescribing tetracycline each month versus time. (It is OK for the numbers on the horizontal axis to just be integers rather than formatted dates.) Produce another plot of the total number of doctors prescribing tetracycline in each month. The curve for total adoptions should first rise rapidly and then level out around month 6.
+```{r}
+adopt_no <- ckm_nodes %>% group_by(adoption_date) %>% 
+  summarize(doctor_no = n()) %>% 
+  ungroup()
+
+adopt_no <- adopt_no %>% mutate(doctor_tot = cumsum(doctor_no))
+
+adopt_no %>% ggplot(aes(x = adoption_date, y = doctor_no)) +
+  geom_point()
+
+adopt_no %>% ggplot(aes(x = adoption_date, y = doctor_tot)) +
+  geom_point()
+```
+
+4. Adopted already or not yet?
+    a. Create a Boolean vector which indicates, for each doctor, whether they had begun prescribing tetracycline by month 2. Convert it to a vector of index numbers. There should be twenty such doctors.
+    b. Create a Boolean vector which indicates, for each doctor, whether they began prescribing tetracycline after month 14, or never prescribed it. Convert it to a vector of index numbers. There should be twenty-three such doctors.
+
+Part II
+----------
+5. The file `ckm_network.dat` contains a binary matrix; the entry in row $i$, column $j$ is 1 if doctor number $i$ said that doctor $j$ was a friend or close professional contact, and 0 otherwise. Load the file into R as `ckm_network`, and verify that gives you a square matrix which contains only 0s and 1s, and that it has 246 rows and columns. Drop the rows and columns corresponding to doctors with missing `adoption_date` values. Check that the result has 125 rows and columns. Use this reduced matrix, and its row and column numbers, for the rest of the lab.
+```{r}
+ckm_network <- read.table('data/ckm_network.dat', header = F )
+dim(ckm_network)
+
+ckm_network <- ckm_network %>% dplyr::filter(adate) %>% 
+  dplyr::select(which(adate))
+
+dim(ckm_network)
+```
+
+6. Create a vector which stores the number of contacts each doctor has. Do not use a loop. Check that doctor number 41 had 3 contacts.
+Hint: You could do this using apply, but you can also do it in one line with a single function.
+
+7. Counting Peer Pressure
+    a. Create a Boolean vector which indicates, for each doctor, whether they were contacts of doctor number 37, and had begun prescribing tetracycline by month 5. Count the number of such doctors without converting the Boolean vector to a vector of indices. There should be three such doctors.
+    b. What proportion of doctor 37’s friends do those two doctors represent? 

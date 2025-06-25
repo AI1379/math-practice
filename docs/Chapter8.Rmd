@@ -1,0 +1,1194 @@
+---
+title: "Date Science with R"
+subtitle: "Numerical Optimization"
+author: "Peng Zhang"
+institute: "School of Mathematical Sciences, Zhejiang University"
+date: "2025/07/01"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+```{r setup, message = F, include=FALSE}
+options(htmltools.dir.version = FALSE)
+# source('xaringan2pdf.R')
+# xaringan_to_pdf('Chapter8.html')
+library(tidyverse)
+library(pdfetch)
+```
+### Agenda
+
+- Basics of optimization
+- Gradient descent
+- Newton's method
+- Curve-fitting
+- R: `optim`, `nls`
+---
+### Examples of Optimization Problems
+
+- Minimize mean-squared error of regression surface (Gauss, c. 1800)
+- Maximize likelihood of distribution (Fisher, c. 1918)
+- Maximize output of plywood from given supplies and factories (Kantorovich, 1939)
+- Maximize output of tanks from given supplies and factories; minimize number of bombing runs to destroy factory (c. 1939--1945)
+- Maximize return of portfolio for given volatility (Markowitz, 1950s)
+- Minimize cost of airline flight schedule (Kantorovich...)
+- Maximize reproductive fitness of an organism (Maynard Smith)
+
+---
+### Optimization Problems
+
+Given an **objective function** $f: \mathcal{D} \mapsto R$, find
+
+$$\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator*{\argmin}{argmin}
+  \theta^* = \argmin_{\theta}{f(\theta)}$$
+
+Basics: maximizing $f$ is minimizing $-f$:
+
+$$\argmax_{\theta}{f(\theta)}= \argmin_{\theta}{-f(\theta)}$$
+
+If $h$ is strictly increasing (e.g., $\log$), then
+
+$$\argmin_{\theta}{f(\theta)} = \argmin_{\theta}{h(f(\theta))}$$
+
+---
+### Considerations
+
+- Approximation: How close can we get to $\theta^*$, and/or $f(\theta^*)$?
+
+- Time complexity: How many computer steps does that take?  
+  <small>Varies with precision of approximation, niceness of $f$, size of
+    $\mathcal{D}$, size of data, method...</small>
+
+- Most optimization algorithms use **successive approximation**, so
+  distinguish number of iterations from cost of each iteration
+---
+### You remember calculus, right?
+
+Suppose $x$ is one dimensional and $f$ is smooth. If $x^*$ is an **interior** minimum / maximum / extremum point
+
+$${\left. \frac{df}{dx} \right|}_{x=x^*} = 0$$
+
+If $x^*$ a minimum,
+$${\left. \frac{d^2f}{dx^2}\right|}_{x=x^*} > 0$$
+---
+### You remember calculus, right?
+
+
+This all carries over to multiple dimensions:
+
+At an **interior extremum**,
+
+$$\nabla f(\theta^*) = 0$$
+
+At an **interior minimum**,
+
+$$\nabla^2 f(\theta^*) \geq 0$$
+  meaning for any vector $v$,
+
+$$v^T \nabla^2 f(\theta^*) v \geq 0$$
+  $\nabla^2 f =$ the **Hessian**, $\mathbf{H}$
+
+
+  $\theta$ might just be a **local** minimum
+
+---
+### Gradients and Changes to f
+
+$$f^{\prime}(x_0)  =  {\left. \frac{df}{dx}\right|}_{x=x_0} = \lim_{x\rightarrow x_0}{\frac{f(x)-f(x_0)}{x-x_0}}$$
+    
+$$f(x)  \approx f(x_0) +(x-x_0)f^{\prime}(x_0)$$
+
+Locally, the function looks linear; to minimize a linear function, move down the slope
+
+Multivariate version:
+
+$$f(\theta) \approx f(\theta_0) + (\theta-\theta_0) \cdot \nabla f(\theta_0)$$
+
+$\nabla f(\theta_0)$ points in the direction of fastest ascent at $\theta_0$
+
+---
+### Gradient Descent
+
+1. Start with initial guess for $\theta$, step-size $\eta$
+2. While ((not too tired) and (making adequate progress))
+    - Find gradient $\nabla f(\theta)$
+    - Set $\theta \leftarrow \theta - \eta \nabla f(\theta)$
+3. Return final $\theta$ as approximate $\theta^*$
+
+Variations: adaptively adjust $\eta$ to make sure of improvement or search along the gradient direction for minimum
+
+---
+### Pros and Cons of Gradient Descent
+
+Pro:
+
+- Moves in direction of greatest immediate improvement
+- If $\eta$ is small enough, gets to a local minimum eventually, and then stops
+
+Cons:
+
+- "small enough" $\eta$ can be really, really small
+- Slowness or zig-zagging if components of $\nabla f$ are very different sizes
+  
+How much work do we need?
+
+---
+### Scaling
+
+Big $O$ notation:
+
+$$h(x) = O(g(x))$$
+
+means
+
+$$\lim_{x\rightarrow\infty}{\frac{h(x)}{g(x)}} = c$$
+
+for some $c \neq 0$  
+
+  <small>e.g., $x^2 - 5000x + 123456778 = O(x^2)$</small>
+
+  <small>e.g., $e^{x}/(1+e^{x}) = O(1)$</small>
+
+Useful to look at over-all scaling, hiding details
+
+Also done when the limit is $x\rightarrow 0$
+
+---
+### How Much Work is Gradient Descent?
+
+
+Pro:
+
+- For nice $f$, $f(\theta) \leq f(\theta^*)+\epsilon$ in $O(\epsilon^{-2})$ iterations
+    + <small>For _very_ nice $f$, only $O(\log{\epsilon^{-1}})$
+      iterations</small>
+- To get $\nabla f(\theta)$, take $p$ derivatives, $\therefore$ each iteration costs $O(p)$
+
+Con:
+
+- Taking derivatives can slow down as data grows --- each iteration might really be $O(np)$
+
+---
+### Taylor Series
+
+What if we do a quadratic approximation to $f$?
+
+
+$$f(x) \approx f(x_0) + (x-x_0)f^{\prime}(x_0) + \frac{1}{2}(x-x_0)^2
+  f^{\prime\prime}(x_0)$$
+
+
+  <small>Special cases of general idea of Taylor approximation</small>
+
+  Simplifies if $x_0$ is a minimum since then $f^{\prime}(x_0) = 0$:
+
+$$f(x) \approx f(x_0) + \frac{1}{2}(x-x_0)^2 f^{\prime\prime}(x_0)$$
+
+  Near a minimum, smooth functions look like parabolas
+
+
+  Carries over to the multivariate case:
+
+$$f(\theta) \approx f(\theta_0) + (\theta-\theta_0) \cdot \nabla f(\theta_0) +
+  \frac{1}{2}(\theta-\theta_0)^T \mathbf{H}(\theta_0) (\theta-\theta_0)$$
+
+---
+### Minimizing a Quadratic
+
+If we know
+
+$$f(x) = ax^2 + bx + c$$
+
+we minimize exactly:
+
+$$\begin{eqnarray*}
+  2ax^* + b & = & 0\\
+  x^* & = & \frac{-b}{2a}
+  \end{eqnarray*}$$
+
+  If
+
+$$f(x) = \frac{1}{2}a (x-x_0)^2 + b(x-x_0) + c$$
+
+then
+
+$$x^* = x_0 - a^{-1}b$$
+---
+### Newton's Method
+
+Taylor-expand for the value *at the minimum* $\theta^*$
+
+$$f(\theta^*) \approx f(\theta) + (\theta^*-\theta) \nabla f(\theta) +
+  \frac{1}{2}(\theta^*-\theta)^T \mathbf{H}(\theta) (\theta^*-\theta)$$
+
+Take gradient, set to zero, solve for $\theta^*$:
+
+$$\begin{eqnarray*}
+    0 & = & \nabla f(\theta) + \mathbf{H}(\theta) (\theta^*-\theta) \\
+    \theta^* & = & \theta - {\left(\mathbf{H}(\theta)\right)}^{-1} \nabla f(\theta)
+  \end{eqnarray*}$$
+
+Works *exactly* if $f$ is quadratic  
+  <small>and $\mathbf{H}^{-1}$ exists, etc.</small>
+
+If $f$ isn't quadratic, keep pretending it is until we get close to
+  $\theta^*$, when it will be nearly true
+
+---
+### Newton's Method: The Algorithm
+
+1. Start with guess for $\theta$
+2. While ((not too tired) and (making adequate progress))
+    - Find gradient $\nabla f(\theta)$ and Hessian $\mathbf{H}(\theta)$
+    - Set $\theta \leftarrow \theta - \mathbf{H}(\theta)^{-1} \nabla f(\theta)$
+
+3. Return final $\theta$ as approximation to $\theta^*$
+
+Like gradient descent, but with inverse Hessian giving the step-size
+
+  <small>"This is about how far you can go with that gradient"</small>
+
+---
+### Advantages and Disadvantages of Newton's Method
+
+Pros:
+
+- Step-sizes chosen adaptively through 2nd derivatives, much harder to get zig-zagging, over-shooting, etc.
+- Also guaranteed to need $O(\epsilon^{-2})$ steps to get within $\epsilon$ of optimum
+- Only $O(\log\log{\epsilon^{-1}})$ for very nice functions
+- Typically many fewer iterations than gradient descent
+
+
+Cons:
+
+- Hopeless if $\mathbf{H}$ doesn't exist or isn't invertible
+- Need to take $O(p^2)$ second derivatives *plus* $p$ first derivatives
+- Need to solve $\mathbf{H} \theta_{\mathrm{new}} = \mathbf{H} \theta_{\mathrm{old}} - \nabla f(\theta_{\mathrm{old}})$ for $\theta_{\mathrm{new}}$
+    + <small>inverting $\mathbf{H}$ is $O(p^3)$, but cleverness gives
+      $O(p^2)$ for solving for $\theta_{\mathrm{new}}$</small>
+---
+### Getting Around the Hessian
+
+Want to use the Hessian to improve convergence
+
+Don't want to have to keep computing the Hessian at each step
+
+Approaches:
+
+- Use knowledge of the system to get some approximation to the Hessian, use that instead of taking derivatives ("Fisher scoring")
+- Use only diagonal entries ($p$ unmixed 2nd derivatives)
+- Use $\mathbf{H}(\theta)$ at initial guess, hope $\mathbf{H}$ changes
+    *very* slowly with $\theta$
+- Re-compute $\mathbf{H}(\theta)$ every $k$ steps, $k > 1$
+- Fast, approximate updates to the Hessian at each step (BFGS)
+
+---
+### Other Methods
+
+- Lots!
+- See bonus slides at end for for "Nedler-Mead", a.k.a. "the simplex method", which doesn't need any derivatives
+- See bonus slides for the meta-method "coordinate descent"
+
+---
+### Curve-Fitting by Optimizing
+
+We have data $(x_1, y_1), (x_2, y_2), \ldots (x_n, y_n)$
+
+We also have possible curves, $r(x;\theta)$
+
+e.g., $r(x) = x \cdot \theta$
+
+e.g., $r(x) = \theta_1 x^{\theta_2}$
+
+e.g., $r(x) = \sum_{j=1}^{q}{\theta_j b_j(x)}$ for fixed "basis" functions
+  $b_j$
+
+Least-squares curve fitting:
+
+$$\hat{\theta} = \argmin_{\theta}{\frac{1}{n}\sum_{i=1}^n{\{y_i - r(x_i;\theta)\}^2}}$$
+
+"Robust" curve fitting: 
+
+$$\hat{\theta} = \argmin_{\theta}{\frac{1}{n}\sum_{i=1}^{n}{\psi\{y_i - r(x_i;\theta)\}}}$$
+
+---
+### Optimization in R: optim()
+
+```
+optim(par, fn, gr, method, control, hessian)
+```
+
+- `fn`: function to be minimized; mandatory
+- `par`: initial parameter guess; mandatory
+- `gr`: gradient function; only needed for some methods
+- `method`: defaults to a gradient-free method ("Nedler-Mead"), could be BFGS (Newton-ish)
+- `control`: optional list of control settings
+    + <small>(maximum iterations, scaling, tolerance for convergence, etc.)</small>
+- `hessian`: should the final Hessian be returned? default FALSE
+
+Return contains the location (`$par`) and the value (`$val`) of the optimum, diagnostics, possibly `$hessian`
+
+---
+### Optimization in R: optim()
+#### fit1: Newton-ish BFGS method
+
+```{r}
+gmp <- read.table("data/gmp.dat")
+gmp$pop <- gmp$gmp/gmp$pcgmp
+library(numDeriv)
+mse <- function(theta) { mean((gmp$pcgmp - theta[1]*gmp$pop^theta[2])^2) }
+grad.mse <- function(theta) { grad(func=mse,x=theta) }
+theta0=c(5000,0.15)
+fit1 <- optim(theta0,mse,grad.mse,method="BFGS",hessian=TRUE)
+```
+
+```{r}
+fit1[1:3]
+```
+---
+```{r}
+fit1[4:6]
+```
+
+---
+### nls
+
+`optim` is a general-purpose optimizer
+
+So is `nlm` --- try them both if one doesn't work
+
+`nls` is for nonlinear least squares
+
+```
+nls(formula, data, start, control, [[many other options]])
+```
+
+- `formula`: Mathematical expression with response variable, predictor variable(s), and unknown parameter(s)
+- `data`: Data frame with variable names matching `formula`
+- `start`: Guess at parameters (optional)
+- `control`: Like with `optim` (optional)
+  
+Returns an `nls` object, with fitted values, prediction methods, etc.
+
+  The default optimization is a version of Newton's method
+---
+### fit2: Fitting the Same Model with nls()
+
+```{r}
+fit2 <- nls(pcgmp~y0*pop^a,data=gmp,start=list(y0=5000,a=0.1))
+summary(fit2)
+```
+
+---
+### fit2: Fitting the Same Model with nls()
+
+```{r, dpi=300, fig.width=6, fig.height=3.5}
+myfunc <- function(x) fit1$par[1]*x^fit1$par[2]
+gmp |> mutate(fitt = fitted(fit2)) |> ggplot()+
+  geom_point(aes(x = pop, y = pcgmp))+ geom_line(aes(x = pop, y = fitt))+
+  stat_function(fun = myfunc, col='blue', linetype = 2)
+```
+
+---
+### Summary
+
+1. Trade-offs: complexity of iteration vs. number of iterations vs. precision of approximation
+    + Gradient descent: less complex iterations, more guarantees, less adaptive
+    + Newton: more complex iterations, but few of them for good functions, more adaptive, less robust
+2. Start with pre-built code like `optim` or `nls`, implement your own as needed
+
+---
+### Nelder-Mead, a.k.a. the Simplex Method
+
+Try to cage $\theta^*$ with a **simplex** of $p+1$ points
+
+Order the trial points, $f(\theta_1) \leq f(\theta_2) \ldots \leq f(\theta_{p+1})$
+
+$\theta_{p+1}$ is the worst guess --- try to improve it
+
+Center of the not-worst = $\theta_0 = \frac{1}{n}\sum_{i=1}^{n}{\theta_i}$
+
+---
+### Nelder-Mead, a.k.a. the Simplex Method
+
+Try to improve the worst guess $\theta_{p+1}$
+
+
+1. **Reflection**: Try $\theta_0 - (\theta_{p+1}-\theta_0)$, across the center from
+  $\theta_{p+1}$
+    + if it's better than $\theta_p$ but not than $\theta_1$, replace the old $\theta_{p+1}$ with it
+    + **Expansion**: if the reflected point is the new best, try $\theta_0 - 2(\theta_{p+1}-\theta_0)$; replace the old $\theta_{p+1}$ with the better of the reflected
+    and the expanded point
+2. **Contraction**: If the reflected point is worse that $\theta_p$, try $\theta_0 + \frac{\theta_{p+1}-\theta_0}{2}$; if the contracted value is better, replace $\theta_{p+1}$
+  with it
+3. **Reduction**: If all else fails, $\theta_i \leftarrow \frac{\theta_1 + \theta_i}{2}$
+4. Go back to (1) until we stop improving or run out of time
+
+---
+### Making Sense of Nedler-Mead
+
+The Moves:
+
+- Reflection: try the opposite of the worst point
+- Expansion: if that really helps, try it some more
+- Contraction: see if we overshot when trying the opposite
+- Reduction: if all else fails, try making each point more like the best point
+
+Pros:
+
+- Each iteration $\leq 4$ values of $f$, plus sorting  
+    <small>(and sorting is at most $O(p\log{p})$, usually much better)</small>
+- No derivatives used, can even work for dis-continuous $f$
+
+Con:
+- Can need _many_ more iterations than gradient methods
+
+---
+### Coordinate Descent
+
+Gradient descent, Newton's method, simplex, etc., adjust all coordinates of $\theta$ at once --- gets harder as the number of dimensions $p$ grows
+
+**Coordinate descent**: never do more than 1D optimization
+
+- Start with initial guess $\theta$
+- While ((not too tired) and (making adequate progress))
+    + For $i \in (1:p)$
+        * do 1D optimization over $i^{\mathrm{th}}$ coordinate of $\theta$,
+      holding the others fixed
+        * Update $i^{\mathrm{th}}$ coordinate to this optimal value
+- Return final value of $\theta$
+
+---
+### Coordinate Descent
+
+Cons:
+
+- Needs a good 1D optimizer
+- Can bog down for very tricky functions, especially with lots of interactions among variables
+
+Pros:
+
+- Can be extremely fast and simple
+
+---
+
+## Constrained & Penalized Optimization
+
+- Optimization under constraints
+- Lagrange multipliers
+- Penalized optimization
+- Statistical uses of penalied optimization
+
+---
+### Maximizing a multinomial likelihood
+
+I roll dice $n$ times; $n_1, \ldots n_6$ count the outcomes
+
+Likelihood and log-likelihood:
+
+$$\begin{eqnarray*}
+L(\theta_1,\theta_2,\theta_3,\theta_4,\theta_5,\theta_6) & = & \frac{n!}{n_1! n_2! n_3! n_4! n_5! n_6!}\prod_{i=1}^{6}{\theta_i^{n_i}}\\
+\ell(\theta_1,\theta_2,\theta_3,\theta_4,\theta_5,\theta_6) & = & \log{\frac{n!}{n_1! n_2! n_3! n_4! n_5! n_6!}} + \sum_{i=1}^{6}{n_i\log{\theta_i}}
+\end{eqnarray*}$$
+
+Optimize by taking the derivative and setting to zero:
+
+$$\begin{eqnarray*}
+\frac{\partial \ell}{\partial \theta_1} & = & \frac{n_1}{\theta_1} = 0\\
+\therefore \theta_1 & =& \infty
+\end{eqnarray*}$$
+
+---
+### Maximizing a multinomial likelihood
+
+We forgot that $\sum_{i=1}^{6}{\theta_i}=1$
+
+We could use the constraint to eliminate one of the variables
+
+$$\theta_6 = 1 - \sum_{i=1}^{5}{\theta_i}$$
+
+Then solve the equations
+
+$$\frac{\partial \ell}{\partial \theta_i} = \frac{n_1}{\theta_i} -\frac{n_6}{1-\sum_{j=1}^{5}{\theta_j}} = 0$$
+
+
+BUT eliminating a variable with the constraint is usually messy
+---
+### Lagrange Multipliers
+
+$$g(\theta) = c ~ \Leftrightarrow ~ g(\theta)-c=0$$
+
+**Lagrangian**:
+
+$$\mathcal{L}(\theta,\lambda) = f(\theta) - \lambda(g(\theta)-c)$$
+
+$= f$ when the constraint is satisfied
+
+Now do _unconstrained_ minimization over $\theta$ and $\lambda$:
+
+$$\begin{eqnarray*}
+{\left.\nabla_{\theta}\mathcal{L}\right|}_{\theta^*,\lambda^*} & = & \nabla f(\theta^*) - \lambda^*\nabla g(\theta^*) =0\\
+{\left. \frac{\partial \mathcal{L}}{\partial \lambda}\right|}_{\theta^*,\lambda^*} & = & g(\theta^*) - c = 0
+\end{eqnarray*}$$
+
+optimizing **Lagrange multiplier** $\lambda$ enforces constraint
+
+More constraints, more multipliers
+
+---
+### Lagrange Multipliers
+
+Try the dice again:
+
+$$\begin{eqnarray*}
+\mathcal{L} & = & \log{\frac{n!}{\prod_i{n_i!}}} + \sum_{i=1}^{6}{n_i\log{(\theta_i)}} - \lambda\left(\sum_{i=1}^{6}{\theta_i} - 1\right)\\
+{\left.\frac{\partial\mathcal{L}}{\partial \theta_i}\right|}_{\theta_i=\theta^*_i} & = & \frac{n_i}{\theta^*_i} - \lambda^* = 0\\
+\frac{n_i}{\lambda^*} & = & \theta^*_i\\
+\sum_{i=1}^{6}{\frac{n_i}{\lambda^*}} & = & \sum_{i=1}^{6}{\theta^*_i} = 1\\
+\lambda^* & =&  \sum_{i=1}^{6}{n_i} ~ \Rightarrow \theta^*_i = \frac{n_i}{\sum_{i=1}^{6}{n_i}}
+\end{eqnarray*}$$
+---
+### Thinking About the Lagrange Multipliers
+
+Constrained minimum value is generally higher than the unconstrained
+
+Changing the constraint level $c$ changes $\theta^*$, $f(\theta^*)$
+
+$$\begin{eqnarray*}
+\frac{\partial f(\theta^*)}{\partial c} & = & \frac{\partial \mathcal{L}(\theta^*,\lambda^*)}{\partial c}\\
+& = & \left[\nabla f(\theta^*)-\lambda^*\nabla g(\theta^*)\right]\frac{\partial \theta^*}{\partial c} - \left[g(\theta^*)-c\right]\frac{\partial \lambda^*}{\partial c} + \lambda^* = \lambda^*
+\end{eqnarray*}$$
+
+$\lambda^* =$ Rate of change in optimal value as the constraint is relaxed
+
+$\lambda^* =$ "Shadow price": How much would you pay for minute change in the level of the constraint
+
+---
+### Inequality Constraints
+
+What about an _inequality_ constraint?
+
+$$h(\theta) \leq d ~ \Leftrightarrow ~ h(\theta) - d \leq 0$$
+
+The region where the constraint is satisfied is the **feasible set**
+
+_Roughly_ two cases:
+
+1. Unconstrained optimum is inside the feasible set $\Rightarrow$ constraint is **inactive**
+2. Optimum is outside feasible set; constraint **is active**, **binds** or **bites**; _constrained_ optimum is usually on the boundary
+
+Add a Lagrange multiplier; $\lambda \neq 0$ $\Leftrightarrow$ constraint binds
+
+---
+### Mathematical Programming
+
+<small>Older than computer programming...</small>
+
+Optimize $f(\theta)$ subject to $g(\theta) = c$ and $h(\theta) \leq d$
+
+> Give us the best deal on $f$, keeping in mind that we've only got $d$ to spend, and the books have to balance
+
+Linear programming (Kantorovich, 1938)
+
+1. $f$, $h$ both linear in $\theta$
+2. $\theta^*$ always at a corner of the feasible set
+
+---
+### Back to the Factory
+
+Revenue: 13k per car, 27k per truck
+
+Constraints:
+
+$$\begin{eqnarray*}
+40 * \mathrm{cars} + 60*\mathrm{trucks} & < & 1600 \mathrm{hours} \\
+1 * \mathrm{cars}+ 3 * \mathrm{trucks} & < & 70 \mathrm{tons}
+\end{eqnarray*}$$
+
+Find the revenue-maximizing number of cars and trucks to produce
+
+---
+### Back to the Factory
+
+The feasible region:
+
+```{r,echo=FALSE, dpi=300, fig.width=12, fig.height=8}
+plot(0,type="n",xlim=c(0,45),ylim=c(0,45),xlab="cars",ylab="trucks")
+abline(70/3,-1/3,lty="dashed",lwd=4)
+abline(80/3,-2/3,lty="dotted",lwd=4)
+legend("topright",legend=c("labor","steel"),lty=c("dotted","dashed"))
+```
+---
+### Back to the Factory
+
+The feasible region, plus lines of equal profit
+
+```{r,echo=FALSE, dpi=300, fig.width=12, fig.height=8}
+plot(0,type="n",xlim=c(0,45),ylim=c(0,45),xlab="cars",ylab="trucks")
+abline(70/3,-1/3,lty="dashed")
+abline(80/3,-2/3)
+legend("topright",legend=c("labor","steel"),lty=c("solid","dashed"))
+for (i in 1:30) {abline(i,-13/27,col="grey",lwd=1)}
+```
+---
+### The Equivalent Capitalist Problem
+
+... _is_ that problem
+
+> the Walrasian model [of economics] is essentially about allocations and only tangentially about markets --- as one of us (Bowles) learned when he noticed that the graduate microeconomics course that he taught at Harvard was easily repackaged as 'The Theory of Economic Planning' at the University of Havana in 1969. (S. Bowles and H. Gintis, "Walrasian Economics in Retrospect", _Quarterly Journal of Economics_, 2000)
+
+---
+### The Slightly More Complex Financial Problem
+
+_Given_: expected returns $r_1, \ldots r_p$ among $p$ financial assets, their $p\times p$ matrix of variances and covariances $\Sigma$
+
+_Find_: the portfolio shares $\theta_1, \ldots \theta_n$ which maximizes expected returns
+
+_Such that_: total variance is below some limit, covariances with specific other stocks or portfolios are below some limit  
+  <small>e.g., pension fund should not be too correlated with parent company</small>
+  
+Expected returns $f(\theta) = r\cdot\theta$
+
+Constraints: $\sum_{i=1}^{p}{\theta_i}=1$, $\theta_i \geq 0$ (unless you can short)  
+  Covariance constraints are linear in $\theta$  
+  Variance constraint is quadratic, over-all variance is $\theta^T \Sigma \theta$
+
+---
+### Barrier Methods
+
+<small>(a.k.a. "interior point", "central path", etc.)</small>
+
+
+Having constraints switch on and off abruptly is annoying  
+    <small>especially with gradient methods</small>
+
+
+Fix $\mu >0$ and try minimizing
+$$f(\theta) - \mu\log{\left(d-h(\theta)\right)}$$
+"pushes away" from the barrier --- more and more weakly as $\mu \rightarrow 0$
+
+---
+### Barrier Methods
+
+1. Initial $\theta$ in feasible set, initial $\mu$
+2. While ((not too tired) and (making adequate progress))  
+    a. Minimize $f(\theta) - \mu\log{\left(d-h(\theta)\right)}$  
+    b. Reduce $\mu$
+3. Return final $\theta$
+
+---
+### R implementation
+
+
+`constrOptim` implements the barrier method
+
+Try this:
+```{r}
+factory <- matrix(c(40,1,60,3),nrow=2,
+  dimnames=list(c("labor","steel"),c("car","truck")))
+available <- c(1600,70); names(available) <- rownames(factory)
+prices <- c(car=13,truck=27)
+revenue <- function(output) { return(-output %*% prices) }
+plan <- constrOptim(theta=c(5,5),f=revenue,grad=NULL,
+  ui=-factory,ci=-available,method="Nelder-Mead")
+plan$par
+```
+
+<small>`constrOptim` only works with constraints like $\mathbf{u}\theta \geq c$, so minus signs</small>
+
+---
+### Constraints vs. Penalties
+
+$$\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator*{\argmin}{argmin}
+\argmin_{\theta : h(\theta) \leq d}{f(\theta)} ~ \Leftrightarrow \argmin_{\theta,\lambda}{f(\theta) - \lambda(h(\theta)-d)}$$
+
+$d$ doesn't matter for doing the second minimization over $\theta$
+
+We could just as well minimize
+
+$$f(\theta) - \lambda h(\theta)$$
+
+Constrained optimization | Penalized optimization
+-------------------------|------------------------
+Constraint level $d$    | Penalty factor $\lambda$
+
+
+"A fine is a price"
+
+---
+### Statistical Applications of Penalization
+
+Mostly you've seen unpenalized estimates (least squares, maximum likelihood)
+
+Lots of modern advanced methods rely on penalties
+
+- For when the direct estimate is too unstable
+- For handling high-dimensional cases
+- For handling non-parametrics
+
+---
+### Ordinary Least Squares
+
+No penalization; minimize MSE of linear function $\beta \cdot x$:
+
+$$\hat{\beta} = \argmin_{\beta}{\frac{1}{n}\sum_{i=1}^{n}{(y_i - \beta\cdot x_i)^2}} = \argmin_{\beta}{MSE(\beta)}$$
+
+Closed-form solution if we can invert matrices:
+
+$$\hat{\beta} = (\mathbf{x}^T\mathbf{x})^{-1}\mathbf{x}^T\mathbf{y}$$
+
+where $\mathbf{x}$ is the $n\times p$ matrix of $x$ vectors, and $\mathbf{y}$ is the $n\times 1$ matrix of $y$ values.
+
+---
+### Ridge Regression
+
+Now put a penalty on the _magnitude_ of the coefficient vector:
+
+$$\tilde{\beta} = \argmin_{\beta}{MSE(\beta) + \mu \sum_{j=1}^{p}{\beta_j^2}} = \argmin_{\beta}{MSE(\beta) + \mu \|\beta\|_2^2}$$
+
+Penalizing $\beta$ this way makes the estimate more _stable_; especially useful for
+- Lots of noise
+- Collinear data ($\mathbf{x}$ not of "full rank")
+- High-dimensional, $p > n$ data (which implies collinearity)
+
+This is called **ridge regression**, or **Tikhonov regularization**
+
+Closed form:
+
+$$\tilde{\beta} = (\mathbf{x}^T\mathbf{x} + \mu I)^{-1}\mathbf{x}^T\mathbf{y}$$
+
+---
+### The Lasso
+
+Put a penalty on the sum of coefficient's absolute values:
+
+$$\beta^{\dagger} = \argmin_{\beta}{MSE(\beta) + \lambda \sum_{j=1}^{p}{|\beta_j|}} = \argmin_{\beta}{MSE(\beta) + \lambda\|\beta\|_1}$$
+
+This is called **the lasso**
+
+- Also stabilizes (like ridge)
+- Also handles high-dimensional data (like ridge)
+- Enforces **sparsity**: it likes to drive small coefficients exactly to 0
+
+No closed form, but very efficient interior-point algorithms (e.g., `lars` package)
+
+---
+### Spline Smoothing
+
+"Spline smoothing": minimize MSE of a smooth, nonlinear function, plus a penalty on curvature:
+
+$$\hat{f} = \argmin_{f}{\frac{1}{n}\sum_{i=1}^{n}{(y_i-f(x_i))^2} + \int{(f^{\prime\prime}(x))^2 dx}}$$
+
+This fits smooth regressions without assuming any specific functional form
+
+- Lets you check linear models 
+- Makes you wonder why you bother with linear models
+
+Many different R implementations, starting with `smooth.spline`
+
+---
+### How Big a Penalty?
+
+Rarely know the constraint level or the penalty factor $\lambda$ from on high
+
+Lots of ways of picking, but often **cross-validation** works well:
+
+- Divide the data into parts
+- For each value of $\lambda$, estimate the model on one part of the data
+- See how well the models fit the other part of the data
+- Use the $\lambda$ which extrapolates best on average
+
+---
+### Summary
+
+- We use Lagrange multipliers to turn constrained optimization problems into unconstrained but penalized ones
+    + Optimal multiplier values are the prices we'd pay to weaken the constraints
+- The nature of the penalty term reflects the sort of constraint we put on the problem
+    + Shrinkage
+    + Sparsity
+    + Smoothness
+
+
+---
+### Hypothesis Testing
+
+Test the hypothesis that the data are distributed $\sim P$ against the hypothesis that they are distributed $\sim Q$
+
+$P=$ noise, $Q=$ signal
+
+Want to maximize **power**, probability the test picks up the signal when it's present
+
+Need to limit false alarm rate, probability the test claims "signal" in noise
+
+---
+### Hypothesis Testing
+
+Say "signal" whenever the data falls into some set $S$
+
+Power $=Q(S)$
+
+False alarm rate $=P(S) \leq \alpha$
+
+$$\max_{S: P(S) \leq \alpha}{Q(S)}$$
+
+With Lagrange multiplier,
+
+$$\max_{S,\lambda}{Q(S) - \lambda(P(S) - \alpha)}$$
+
+Looks like we have to do ugly calculus over set functions...
+
+---
+### Hypothesis Testing
+
+Pick any point $x$: should we add it to $S$?
+
+Marginal benefit = $dQ/dx = q(x)$  
+
+Marginal cost = $\lambda dP/dx = \lambda p(x)$
+
+Keep expanding $S$ until marginal benefit = marginal cost so $q(x)/p(x) = \lambda$
+
+$q(x)/p(x) =$ **likelihood ratio**; optimal test is **Neyman-Pearson test**
+
+$\lambda =$ critical likelihood ratio $=$ shadow price of power
+
+---
+### Lasso Example
+
+```{r}
+x <- matrix(rnorm(200),nrow=100)
+y <- (x %*% c(2,1))+ rnorm(100,sd=0.05)
+mse <- function(b1,b2) {mean((y- x %*% c(b1,b2))^2)}
+coef.seq <- seq(from=-1,to=5,length.out=200)
+m <- outer(coef.seq,coef.seq,Vectorize(mse))
+l1 <- function(b1,b2) {abs(b1)+abs(b2)}
+l1.levels <- outer(coef.seq,coef.seq,l1)
+ols.coefs <- coefficients(lm(y~0+x))
+```
+---
+```{r, dpi=300, fig.width=12, fig.height=8}
+contour(x=coef.seq,y=coef.seq,z=m,drawlabels=FALSE,nlevels=30,col="grey",
+  main="Contours of MSE vs. Contours of L1")
+contour(x=coef.seq,y=coef.seq,z=l1.levels,nlevels=20,add=TRUE)
+points(x=ols.coefs[1],y=ols.coefs[2],pch="+")
+points(0,0)
+```
+
+---
+### Lasso Example
+
+```{r, fig.width=12, fig.height=8}
+contour(x=coef.seq,y=coef.seq,z=m+l1.levels,drawlabels=FALSE,nlevels=30,
+  main="Contours of MSE+L1")
+```
+
+---
+### Augmented Lagrangian Methods
+
+A simple trick for constrained optimization: minimize
+
+$$f(\theta) + r(g(\theta)-c)^2$$
+over and over, letting $r \rightarrow \infty$
+
+Drawback: really unstable when $r$ is huge
+
+Augmented Lagrangian trick: fix $r$ and a guess at $\lambda$, then minimize
+
+$$f(\theta) + \lambda(g(\theta)-c) + r(g(\theta)-c)^2$$
+Now crank up $r$ and update $\lambda$ by an amount that reflects how badly the constraint was violated
+
+Often converges at finite $r$
+
+---
+### Augmented Lagrangian Methods
+
+Same ideas work for inequality constraints
+
+Unlike interior-point methods, initial guess needn't be in feasible set
+
+R impelementation: `alabama` package
+
+---
+## Stochastic Optimization
+
+- Why there's such a thing as too much data
+- How to make noise our friend
+- How to make slop our friend
+
+$$\newcommand{\Expect}[1]{\mathbb{E}\left[ #1 \right]}
+\newcommand{\Var}[1]{\mathrm{Var}\left[ #1 \right]}
+\newcommand{\ER}{f}
+\newcommand{\TrueR}{f_0}
+\newcommand{\ERM}{\hat{\theta}_n}
+\newcommand{\EH}{\widehat{\mathbf{H}}_n}
+\newcommand{\tr}[1]{\mathrm{tr}\left( #1 \right)}$$
+
+Optional reading: Bottou and Bosquet, ["The Tradeoffs of Large Scale Learning"](http://leon.bottou.org/publications/pdf/mloptbook-2011.pdf)
+
+---
+### Problems with Big Data
+
+- Typical statistical objective function, mean-squared error:
+
+$$f(\theta) = \frac{1}{n}\sum_{i=1}^{n}{{\left( y_i - m(x_i,\theta)\right)}^2}$$
+
+- Getting a value of $f$ is $O(n)$, $\nabla f$ is $O(np)$, $\mathbf{H}$ is $O(np^2)$
+    + <small>worse still if $m$ slows down with $n$</small>
+
+- Not bad when $n=100$ or even $n=10^4$, but if $n={10}^9$ or $n={10}^{12}$ we don't even know which way to move
+
+---
+### Sampling, an Alternative to Sarcastic Gradient Descent
+
+- Pick _one_ data point $I$ at random (uniform on $1:n$)
+
+- Loss there, ${\left( y_I - m(x_I,\theta)\right)}^2$, is random, but
+
+
+$$\Expect{{\left( y_I - m(x_I,\theta)\right)}^2} = f(\theta)$$
+
+- Generally, if $f(\theta) = n^{-1}\sum_{i=1}^{n}{f_i(\theta)}$ and $f_i$ are
+well-behaved,
+$$\begin{eqnarray*}
+\Expect{f_I(\theta)} & = & f(\theta)\\
+\Expect{\nabla f_I(\theta)} & = & \nabla f(\theta)\\
+\Expect{\nabla^2 f_I(\theta)} & = & \mathbf{H}(\theta)
+\end{eqnarray*}$$
+
+$\therefore$ Don't optimize with all the data, optimize with random samples
+
+---
+### Stochastic Gradient Descent
+
+Draw lots of one-point samples, let their noise cancel out:
+
+1. Start with initial guess $\theta$, learning rate $\eta$
+2. While ((not too tired) and (making adequate progress))  
+    + At $t^{\mathrm{th}}$ iteration, pick random $I$ uniformly  
+    + Set $\theta\leftarrow \theta - t^{-1}\eta\nabla f_I(\theta)$
+3. Return final $\theta$
+
+
+Shrinking step-size by $1/t$ ensures noise in each gradient dies down
+
+<small>(Variants: put points in some random order, only check progress
+  after going over each point once, adjust $1/t$ rate, average a couple of
+  random data points ("mini-batch"), etc.)</small>
+
+---
+### Stochastic Gradient Descent
+
+```{r}
+stoch.grad.descent <- function(f,theta,df,max.iter=1e6,rate=1e-6) {
+  for (t in 1:max.iter) {
+    g <- stoch.grad(f,theta,df)
+    theta <- theta - (rate/t)*g
+  }
+  return(x)
+}
+
+stoch.grad <- function(f,theta,df) {
+  stopifnot(require(numDeriv))
+  i <- sample(1:nrow(df),size=1)
+  noisy.f <- function(theta) { return(f(theta, data=df[i,])) }
+  stoch.grad <- grad(noisy.f,theta)
+  return(stoch.grad)
+}
+```
+---
+### Stochastic Newton's Method
+
+a.k.a. 2nd order stochastic gradient descent
+
+
+1.  Start with initial guess $\theta$
+2.  While ((not too tired) and (making adequate progress))  
+    + At $t^{\mathrm{th}}$ iteration, pick uniformly-random $I$  
+    + $\theta \leftarrow \theta - t^{-1}\mathbf{H}_{I}^{-1}(\theta) \nabla f_{I}(\theta)$
+3. Return final $\theta$
+
+
+<small>+ all the Newton-ish tricks to avoid having to recompute the Hessian</small>
+
+---
+### Stochastic Gradient Methods
+
+
+- Pros:
+    + Each iteration is fast (and constant in $n$)
+    + Never need to hold all data in memory
+    + Does converge eventually
+
+- Cons:
+    + Noise _does_ reduce precision --- more iterations to get within $\epsilon$ of optimum than non-stochastic GD or Newton
+
+
+Often low computational cost to get within _statistical_ error of
+the optimum
+
+---
+### How Precise?
+
+- We're minimizing $f$ and aiming at $\hat{\theta}$
+
+- $f$ is a function of the data, which are full of useless details
+    + e.g., $f(\theta) = n^{-1}\sum_{i=1}^{n}{(y_i-m(x_i;\theta))^2}$
+
+- We hope there's some true $f_0$, with minimum $\theta_0$
+    + e.g., $f_0(\theta) = \Expect{(Y-m(X;\theta))^2} = \int{(y-m(x;\theta))^2 p(x,y) dx dy}$
+- but we know $f \neq f_0$
+    + because we've only got a finite sample, which includes noise
+
+- Past some point, getting a better $\hat{\theta}$ isn't helping is find $\theta_0$
+
+(why push optimization to $\pm {10}^{-6}$ if $f$ only matches $f_0$ to $\pm 1$?)
+
+---
+### How Precise?
+
+- An example
+    + true model: $Y=X +$ Gaussian noise with mean 0, s.d. 0.1, $X$ uniform between 0 and 1
+    + Try regression through the origin ($Y=bX$, $b$ unknown)
+- We'll plot the population objective function, and a bunch of sample objective functions from different $n=30$ draws
+
+```{r}
+f0 <- function(b) { 0.1^2+ (1/3)*(b-1)^2 }
+f <- Vectorize(FUN=function(b,df) { mean((df$y - b*df$x)^2) }, vectorize.args="b")
+simulate_df <- function(n) {
+  x <- runif(n)
+  y<-x+rnorm(n,0,0.1)
+  return(data.frame(x=x,y=y))
+}
+```
+
+---
+### How Precise?
+```{r,results="hide", fig.width=9, fig.height=6}
+curve(f0(b=x), from=0,to=2,)
+replicate(100,curve(f(b=x,df=simulate_df(30)),
+  add=TRUE,col="grey",lwd=0.1))
+```
+
+---
+### How Precise?
+
+- Pretty generally:
+    + $\hat{\theta} - \theta_0 = O(1/\sqrt{n})$ at best
+    + $f(\hat{\theta}) - f(\theta_0) = O(1/n)$ at best
+    + see bonus slides for gory details
+- Not much point in pushing an optimization past those limits
+    + More work gets a better approximation to $\hat{\theta}$...
+    + but the numerical precision is swamped by the statistical noise...
+    + so the answer isn't really any more accurate or precise than if we'd stopped sooner
+
+---
+### How Precise?
+
+- We shouldn't care about differences in $\theta$ much smaller than $O(1/\sqrt{n})$...
+    + <small>the `tol` of the optimization</small>
+- but what's the constant multiplying $1/\sqrt{n}$?
+- Could do some heroic calculus + linear algebra
+    + "sandwich covariance matrix" (see bonus slides; the answer involves the Hessian)
+- Can use tricks like the jackknife to get an idea of what the statistical
+uncertainty is
+    + though the bootstrap is usually better than the jackknife (take 36-402)
+
+---
+### Summary
+
+- Stochastic gradient descent etc. deliberately use samples of the data, rather than all of it at once
+    + Gives up precision for speed and memory
+    + Make fitting models to enormous data sets computationally tractable
+- Since the function we're optimizing is noisy anyway, don't bother pushing the numerical precision much below the statistical uncertainty
+    + Can estimate uncertainty by statistical theory
+    + or by re-sampling methods
+
+---
+### Asymptotics of Optimization
+
+Have $\ER$ (sample objective) but want to minimize $\TrueR$ (population objective)
+
+If $\ER$ is an average over data points, then (law of large numbers)
+$$\Expect{\ER(\theta)} = \TrueR(\theta)$$
+and (central limit theorem)
+$$\ER(\theta) - \TrueR(\theta) = O(n^{-1/2})$$
+
+---
+### Asymptotics of Optimization
+
+Do the opposite expansion to the one we used to derive Newton's method:
+
+$$\begin{eqnarray*}
+\ERM & = & \argmin_{\theta}{\ER(\theta)}\\
+\nabla \ER(\ERM) & = & 0\\
+&\approx & \nabla \ER(\theta^*) + \EH(\theta^*)(\ERM-\theta^*)\\
+\ERM & \approx & \theta^* - \EH^{-1}(\theta^*) \nabla\ER(\theta^*) 
+\end{eqnarray*}$$
+
+---
+### Asymptotics of Optimization
+
+$$\ERM  \approx  \theta^* - \EH^{-1}(\theta^*) \nabla\ER(\theta^*)$$
+
+When does $\EH^{-1}(\theta^*)\nabla\ER(\theta^*) \rightarrow 0$?
+
+$$\begin{eqnarray*}
+\EH(\theta^*) & \rightarrow & \mathbf{H}(\theta^*) ~ \mathrm{(by\ LLN)}\\
+\nabla\ER(\theta^*) - \nabla f(\theta^*) & = & O(n^{-1/2}) ~ \mathrm{(by\ CLT)}
+\end{eqnarray*}$$
+
+but $\nabla f(\theta^*) = 0$
+
+$$\begin{eqnarray*}
+\therefore \nabla\ER(\theta^*) & = & O(n^{-1/2})\\
+\Var{\nabla \ER(\theta^*)} & \rightarrow & n^{-1} \mathbf{K}(\theta^*) ~ \mathrm{(CLT\ again)}
+\end{eqnarray*}$$
+
+---
+### Asymptotics of Optimization
+
+How much noise is there in $\ERM$?
+
+$$\begin{eqnarray*}
+\Var{\ERM} & = & \Var{\ERM-\theta^*}\\
+& = & \Var{\EH^{-1}(\theta^*) \nabla\ER(\theta^*)}\\
+& = & \EH^{-1}(\theta^*)\Var{\nabla\ER(\theta^*)} \EH^{-1}(\theta^*)\\
+& \rightarrow & n^{-1} \mathbf{H}^{-1}(\theta^*) \mathbf{K}(\theta^*) \mathbf{H}^{-1}(\theta^*) \\
+& = &O(pn^{-1})
+\end{eqnarray*}$$
+
+so $\ERM - \theta^* = O(1/\sqrt{n})$
+
+---
+### Asymptotics of Optimization
+
+How much noise is there in $\TrueR(\ERM)$?
+
+$$\begin{eqnarray*}
+\TrueR(\ERM) - \TrueR(\theta^*) & \approx & \frac{1}{2}(\ERM-\theta^*)^T \mathbf{H}(\theta^*) (\ERM-\theta^*)\\
+\Expect{f(\ERM) - f(\theta^*)} & \approx & \frac{1}{2}\tr{\Var{(\ERM-\theta^*)}\mathbf{H}(\theta^*)} \\
+ & +& \frac{1}{2} \Expect{\ERM -\theta^*}^T \mathbf{H}(\theta^*) \Expect{\ERM -\theta^*}\\
+&= & \frac{1}{2}\tr{n^{-1} \mathbf{H}^{-1}(\theta^*) \mathbf{K}(\theta^*) \mathbf{H}^{-1}(\theta^*)\mathbf{H}(\theta^*) }\\
+& = & \frac{1}{2}n^{-1}\tr{\mathbf{H}^{-1}(\theta^*)\mathbf{K}(\theta^*)}\\
+\Var{\TrueR(\ERM)-\TrueR(\theta^*)} & \approx & \tr{\left(\mathbf{H}(\theta^*) \Var{\ERM-\theta^*} \mathbf{H}(\theta^*) \Var{\ERM-\theta^*}\right)}\\
+& \rightarrow & n^{-2} \tr{\left(\mathbf{K}(\theta^*)\mathbf{H}^{-1}(\theta^*)\mathbf{K}(\theta^*)\mathbf{H}^{-1}(\theta^*)\right)}\\
+& = & O(pn^{-2})
+\end{eqnarray*}$$
+---
+### Asymptotics of Optimization
+
+The ideal case is well-specified maximum likelihood: then $\mathbf{K} = \mathbf{H}$, and
+
+$$\begin{eqnarray*}
+\ERM & \approx & \theta^* - \EH^{-1}(\theta^*) \nabla\ER(\theta^*)\\
+\Expect{f(\ERM) - f(\theta^*)} & \approx & \frac{1}{2}n^{-1} p\\
+\Var{\ERM} &\approx & n^{-1} \mathbf{H}^{-1}(\theta^*) \approx n^{-1} \mathbf{H}(\ERM) \\
+\Var{f(\ERM)-f(\theta^*)} & \approx & n^{-2} p
+\end{eqnarray*}$$
+
