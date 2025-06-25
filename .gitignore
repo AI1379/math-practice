@@ -1,0 +1,30 @@
+# R specific
+.Rhistory
+.RData
+.Rproj.user/
+.Rproj
+.Ruserdata
+
+# Python specific
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+*.env
+*.venv
+.env/
+.venv/
+*.ipynb_checkpoints
+
+# General
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.tmp
+*.bak
