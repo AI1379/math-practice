@@ -23,7 +23,10 @@ def convert_ipynb_to_rmd(ipynb_path, rmd_path=None):
 
     # Build Rmd content
     rmd_content = "---\noutput: pdf_document\n---\n\n"
-    if notebook["cells"][0]["cell_type"] == "raw":
+    if (
+        notebook["cells"][0]["cell_type"] == "raw"
+        or notebook["cells"][0]["cell_type"] == "yaml"
+    ):
         # It is the YAML header
         rmd_content = "".join(notebook["cells"][0]["source"]) + "\n\n"
 
@@ -41,6 +44,15 @@ def convert_ipynb_to_rmd(ipynb_path, rmd_path=None):
             )
 
             rmd_content += f"```{{r}}\n{code}\n```\n\n"
+
+    # Convert $$ math blocks to \[ \] format
+    # Use a regex with capture groups to identify and clean math content
+    rmd_content = re.sub(
+        r"\$\$([\s\n]*)(.+?)([\s\n]*)\$\$",
+        lambda m: f"\\[{m.group(2).strip()}\\]",
+        rmd_content,
+        flags=re.DOTALL,
+    )
 
     # Write Rmd file
     with open(rmd_path, "w", encoding="utf-8") as f:
