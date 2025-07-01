@@ -33,7 +33,7 @@ def convert_ipynb_to_rmd(ipynb_path, rmd_path=None):
     for cell in notebook["cells"]:
         if cell["cell_type"] == "markdown":
             # Process Markdown cells
-            rmd_content += "\n".join(cell["source"]) + "\n\n"
+            rmd_content += "".join(cell["source"]) + "\n\n"
         elif cell["cell_type"] == "code":
             # Process code cells
             code = "".join(cell["source"])
@@ -49,7 +49,7 @@ def convert_ipynb_to_rmd(ipynb_path, rmd_path=None):
     # Use a regex with capture groups to identify and clean math content
     rmd_content = re.sub(
         r"\$\$([\s\n]*)(.+?)([\s\n]*)\$\$",
-        lambda m: f"\\[{m.group(2).strip()}\\]",
+        lambda m: f"\n\\[\n{m.group(2).strip()}\n\\]\n",
         rmd_content,
         flags=re.DOTALL,
     )
