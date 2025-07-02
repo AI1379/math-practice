@@ -21,6 +21,34 @@ def convert_ipynb_to_rmd(ipynb_path, rmd_path=None):
     with open(ipynb_path, "r", encoding="utf-8") as f:
         notebook = json.load(f)
 
+    # Auto merge neighbor code blocks
+    merged_cells = []
+    i = 0
+    while i < len(notebook["cells"]):
+        cell = notebook["cells"][i]
+        if cell["cell_type"] == "code":
+            # Start merging consecutive code cells
+            merged_source = cell["source"].copy()
+            j = i + 1
+            while (
+                j < len(notebook["cells"])
+                and notebook["cells"][j]["cell_type"] == "code"
+            ):
+                merged_source.extend(["\n"])
+                merged_source.extend(notebook["cells"][j]["source"])
+                j += 1
+
+            # Create merged cell
+            merged_cell = {"cell_type": "code", "source": merged_source}
+            merged_cells.append(merged_cell)
+            i = j
+        else:
+            # Keep non-code cells as is
+            merged_cells.append(cell)
+            i += 1
+
+    notebook["cells"] = merged_cells
+
     # Build Rmd content
     rmd_content = "---\noutput: pdf_document\n---\n\n"
     if (
